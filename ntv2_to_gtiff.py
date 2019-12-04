@@ -88,6 +88,8 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
 
     nbands = 2 if args.do_not_write_error_samples else 4
 
+    compact_md = True if len(subdatsets) > 50 else False
+
     for idx_ifd, subds in enumerate(subdatsets):
         src_ds = gdal.Open(subds[0])
         assert src_ds.GetMetadataItem('GS_TYPE') == 'SECONDS'
@@ -116,37 +118,42 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
         data = src_ds.GetRasterBand(1).ReadRaster()
         tmp_ds.GetRasterBand(1).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
                                             data)
-        tmp_ds.GetRasterBand(1).SetDescription('latitude_offset')
-        tmp_ds.GetRasterBand(1).SetUnitType('arc-second')
+        if idx_ifd == 0 or not compact_md:
+            tmp_ds.GetRasterBand(1).SetDescription('latitude_offset')
+            tmp_ds.GetRasterBand(1).SetUnitType('arc-second')
 
         data = src_ds.GetRasterBand(2).ReadRaster()
         tmp_ds.GetRasterBand(2).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
                                             data)
-        tmp_ds.GetRasterBand(2).SetDescription('longitude_offset')
-        tmp_ds.GetRasterBand(2).SetUnitType('arc-second')
+        if idx_ifd == 0 or not compact_md:
+            tmp_ds.GetRasterBand(2).SetDescription('longitude_offset')
+            tmp_ds.GetRasterBand(2).SetUnitType('arc-second')
 
         if nbands == 4:
             data = src_ds.GetRasterBand(3).ReadRaster()
             tmp_ds.GetRasterBand(3).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
                                                 data)
-            tmp_ds.GetRasterBand(3).SetDescription('latitude_offset_accuracy')
-            tmp_ds.GetRasterBand(3).SetUnitType('metre')
+            if idx_ifd == 0 or not compact_md:
+                tmp_ds.GetRasterBand(3).SetDescription('latitude_offset_accuracy')
+                tmp_ds.GetRasterBand(3).SetUnitType('metre')
 
             data = src_ds.GetRasterBand(4).ReadRaster()
             tmp_ds.GetRasterBand(4).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
                                                 data)
-            tmp_ds.GetRasterBand(4).SetDescription('longitude_offset_accuracy')
-            tmp_ds.GetRasterBand(4).SetUnitType('metre')
+            if idx_ifd == 0 or not compact_md:
+                tmp_ds.GetRasterBand(4).SetDescription('longitude_offset_accuracy')
+                tmp_ds.GetRasterBand(4).SetUnitType('metre')
 
         dst_crs = osr.SpatialReference()
         dst_crs.SetFromUserInput(args.target_crs)
         dst_auth_name = dst_crs.GetAuthorityName(None)
         dst_auth_code = dst_crs.GetAuthorityCode(None)
-        if dst_auth_name == 'EPSG' and dst_auth_code:
-            tmp_ds.SetMetadataItem('target_crs_epsg_code', dst_auth_code)
-        else:
-            tmp_ds.SetMetadataItem(
-                'target_crs_wkt', dst_crs.ExportToWkt(['FORMAT=WKT2_2018']))
+        if idx_ifd == 0 or not compact_md:
+            if dst_auth_name == 'EPSG' and dst_auth_code:
+                tmp_ds.SetMetadataItem('target_crs_epsg_code', dst_auth_code)
+            else:
+                tmp_ds.SetMetadataItem(
+                    'target_crs_wkt', dst_crs.ExportToWkt(['FORMAT=WKT2_2018']))
 
         if idx_ifd == 0:
             desc = args.description
@@ -265,6 +272,10 @@ def generate_optimized_file(tmpfilename, destfilename, args):
 
     ifds = []
 
+    offlinedata_to_offset = {}
+
+    reuse_offlinedata = True
+
     while next_ifd_offset != 0:
 
         in_f.seek(next_ifd_offset)
@@ -301,9 +312,13 @@ def generate_optimized_file(tmpfilename, destfilename, args):
                 in_f.seek(tagvalueoroffset)
                 tagdata = in_f.read(tagvalsize)
                 in_f.seek(curinoff)
-                tagdict[tagid] = OfflineTag(
-                    tagtype, tagnvalues, tagdata, out_f.tell())
-                out_f.write(struct.pack('<I', 0xDEADBEEF))  # placeholder
+
+                if reuse_offlinedata and tagdata in offlinedata_to_offset:
+                    out_f.write(struct.pack('<I', offlinedata_to_offset[tagdata]))
+                else:
+                    tagdict[tagid] = OfflineTag(
+                        tagtype, tagnvalues, tagdata, out_f.tell())
+                    out_f.write(struct.pack('<I', 0xDEADBEEF))  # placeholder
 
         next_ifd_offset = struct.unpack('<I', in_f.read(4))[0]
         next_ifd_offset_out_offset = out_f.tell()
@@ -325,6 +340,8 @@ def generate_optimized_file(tmpfilename, destfilename, args):
             out_f.write(struct.pack('<I', cur_pos))
             out_f.seek(cur_pos)
             out_f.write(tagdict[id].data)
+            if reuse_offlinedata:
+                offlinedata_to_offset[tagdict[id].data] = cur_pos
 
         ifds.append(IFD(tagdict))
 
