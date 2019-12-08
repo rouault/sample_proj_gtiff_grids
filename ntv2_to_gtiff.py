@@ -63,6 +63,11 @@ def get_args():
 
     parser.add_argument('--do-not-write-error-samples', dest='do_not_write_error_samples',
                         action='store_true')
+
+    parser.add_argument('--uint16-encoding', dest='uint16_encoding',
+                        action='store_true',
+                        description='Use uint16 storage with linear scaling/offseting')
+
     return parser.parse_args()
 
 
@@ -98,7 +103,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                                                       src_ds.RasterXSize,
                                                       src_ds.RasterYSize,
                                                       nbands,
-                                                      gdal.GDT_Float32)
+                                                      gdal.GDT_Float32 if not args.uint16_encoding else gdal.GDT_UInt16)
         src_crs = osr.SpatialReference()
         src_crs.SetFromUserInput(args.source_crs)
         tmp_ds.SetSpatialRef(src_crs)
@@ -115,34 +120,52 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
             tmp_ds.SetMetadataItem(
                 'number_of_nested_grids', str(len(subgrids[grid_name])))
 
-        data = src_ds.GetRasterBand(1).ReadRaster()
-        tmp_ds.GetRasterBand(1).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
-                                            data)
-        if idx_ifd == 0 or not compact_md:
-            tmp_ds.GetRasterBand(1).SetDescription('latitude_offset')
-            tmp_ds.GetRasterBand(1).SetUnitType('arc-second')
+        if args.uint16_encoding:
+            for i in (1,2):
+                min, max = src_ds.GetRasterBand(i).ComputeRasterMinMax()
+                data = src_ds.GetRasterBand(i).ReadAsArray()
+                scale = (max - min) / 65535
+                data = (data - min) / scale
+                tmp_ds.GetRasterBand(i).WriteArray(data)
+                tmp_ds.GetRasterBand(i).SetOffset(min)
+                tmp_ds.GetRasterBand(i).SetScale(scale)
+                if idx_ifd == 0 or not compact_md:
+                    tmp_ds.GetRasterBand(i).SetDescription('latitude_offset' if i == 1 else 'longitude_offset')
+                    tmp_ds.GetRasterBand(i).SetUnitType('arc-second')
 
-        data = src_ds.GetRasterBand(2).ReadRaster()
-        tmp_ds.GetRasterBand(2).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
-                                            data)
-        if idx_ifd == 0 or not compact_md:
-            tmp_ds.GetRasterBand(2).SetDescription('longitude_offset')
-            tmp_ds.GetRasterBand(2).SetUnitType('arc-second')
+            if nbands == 4:
+                for i in (3,4):
+                    min, max = src_ds.GetRasterBand(i).ComputeRasterMinMax()
+                    data = src_ds.GetRasterBand(i).ReadAsArray()
+                    scale = (max - min) / 65535
+                    if scale == 0:
+                        data = 0 * data
+                    else:
+                        data = (data - min) / scale
+                    tmp_ds.GetRasterBand(i).WriteArray(data)
+                    tmp_ds.GetRasterBand(i).SetOffset(min)
+                    tmp_ds.GetRasterBand(i).SetScale(scale)
+                    if idx_ifd == 0 or not compact_md:
+                        tmp_ds.GetRasterBand(i).SetDescription('latitude_offset_accuracy' if i == 3 else 'longitude_offset_accuracy')
+                        tmp_ds.GetRasterBand(i).SetUnitType('metre')
 
-        if nbands == 4:
-            data = src_ds.GetRasterBand(3).ReadRaster()
-            tmp_ds.GetRasterBand(3).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
-                                                data)
-            if idx_ifd == 0 or not compact_md:
-                tmp_ds.GetRasterBand(3).SetDescription('latitude_offset_accuracy')
-                tmp_ds.GetRasterBand(3).SetUnitType('metre')
+        else:
+            for i in (1,2):
+                data = src_ds.GetRasterBand(i).ReadRaster()
+                tmp_ds.GetRasterBand(i).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
+                                                    data)
+                if idx_ifd == 0 or not compact_md:
+                    tmp_ds.GetRasterBand(i).SetDescription('latitude_offset' if i == 1 else 'longitude_offset')
+                    tmp_ds.GetRasterBand(i).SetUnitType('arc-second')
 
-            data = src_ds.GetRasterBand(4).ReadRaster()
-            tmp_ds.GetRasterBand(4).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
-                                                data)
-            if idx_ifd == 0 or not compact_md:
-                tmp_ds.GetRasterBand(4).SetDescription('longitude_offset_accuracy')
-                tmp_ds.GetRasterBand(4).SetUnitType('metre')
+            if nbands == 4:
+                for i in (3,4):
+                    data = src_ds.GetRasterBand(i).ReadRaster()
+                    tmp_ds.GetRasterBand(i).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
+                                                        data)
+                    if idx_ifd == 0 or not compact_md:
+                        tmp_ds.GetRasterBand(i).SetDescription('latitude_offset_accuracy' if i == 3 else 'longitude_offset_accuracy')
+                        tmp_ds.GetRasterBand(i).SetUnitType('metre')
 
         dst_crs = osr.SpatialReference()
         dst_crs.SetFromUserInput(args.target_crs)
@@ -176,7 +199,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
 
         options = ['PHOTOMETRIC=MINISBLACK',
                    'COMPRESS=DEFLATE',
-                   'PREDICTOR=3',
+                   'PREDICTOR=3' if not args.uint16_encoding else 'PREDICTOR=2',
                    'INTERLEAVE=BAND',
                    'GEOTIFF_VERSION=1.1']
         if tmp_ds.RasterXSize > 256 and tmp_ds.RasterYSize > 256:
