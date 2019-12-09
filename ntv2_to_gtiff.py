@@ -41,6 +41,7 @@ import datetime
 import os
 import struct
 
+
 def get_args():
     parser = argparse.ArgumentParser(
         description='Convert NTv2 grid into PROJ GeoTIFF.')
@@ -77,15 +78,15 @@ def get_args():
 def get_year_month_day(src_date, src_basename):
     assert len(src_date) == 8
     if (src_date[2] == '-' and src_date[5] == '-') or \
-        (src_date[2] == '/' and src_date[5] == '/'):
+            (src_date[2] == '/' and src_date[5] == '/'):
         if src_basename.startswith('rdtrans') or \
-            src_basename.startswith('ntf_r93') or \
-            src_basename.startswith('BWTA2017') or \
-            src_basename.startswith('BETA2007') or \
-            src_basename.startswith('D73_ETRS89_geo') or \
-            src_basename.startswith('DLx_ETRS89_geo'):
+                src_basename.startswith('ntf_r93') or \
+                src_basename.startswith('BWTA2017') or \
+                src_basename.startswith('BETA2007') or \
+                src_basename.startswith('D73_ETRS89_geo') or \
+                src_basename.startswith('DLx_ETRS89_geo'):
             # rdtrans2018.gsb has 22-11-18 &
-            #ntf_r93.gsb has 31/10/07, hence D-M-Y
+            # ntf_r93.gsb has 31/10/07, hence D-M-Y
             day = int(src_date[0:2])
             month = int(src_date[3:5])
             year = int(src_date[6:8])
@@ -105,7 +106,7 @@ def get_year_month_day(src_date, src_basename):
                             'A66_National_13_09_01.gsb',
                             'National_84_02_07_01.gsb',
                             'AT_GIS_GRID.gsb') or \
-            src_basename.startswith('GDA94_GDA2020'):
+                src_basename.startswith('GDA94_GDA2020'):
             # nzgd2kgrid0005 has 20111999, hence D-M-Y
             day = int(src_date[0:2])
             month = int(src_date[2:4])
@@ -172,7 +173,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                 'number_of_nested_grids', str(len(subgrids[grid_name])))
 
         if args.uint16_encoding:
-            for i in (1,2):
+            for i in (1, 2):
                 min, max = src_ds.GetRasterBand(i).ComputeRasterMinMax()
                 data = src_ds.GetRasterBand(i).ReadAsArray()
                 scale = (max - min) / 65535
@@ -181,11 +182,12 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                 tmp_ds.GetRasterBand(i).SetOffset(min)
                 tmp_ds.GetRasterBand(i).SetScale(scale)
                 if idx_ifd == 0 or not compact_md:
-                    tmp_ds.GetRasterBand(i).SetDescription('latitude_offset' if i == 1 else 'longitude_offset')
+                    tmp_ds.GetRasterBand(i).SetDescription(
+                        'latitude_offset' if i == 1 else 'longitude_offset')
                     tmp_ds.GetRasterBand(i).SetUnitType('arc-second')
 
             if nbands == 4:
-                for i in (3,4):
+                for i in (3, 4):
                     min, max = src_ds.GetRasterBand(i).ComputeRasterMinMax()
                     data = src_ds.GetRasterBand(i).ReadAsArray()
                     scale = (max - min) / 65535
@@ -197,25 +199,28 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                     tmp_ds.GetRasterBand(i).SetOffset(min)
                     tmp_ds.GetRasterBand(i).SetScale(scale)
                     if idx_ifd == 0 or not compact_md:
-                        tmp_ds.GetRasterBand(i).SetDescription('latitude_offset_accuracy' if i == 3 else 'longitude_offset_accuracy')
+                        tmp_ds.GetRasterBand(i).SetDescription(
+                            'latitude_offset_accuracy' if i == 3 else 'longitude_offset_accuracy')
                         tmp_ds.GetRasterBand(i).SetUnitType('metre')
 
         else:
-            for i in (1,2):
+            for i in (1, 2):
                 data = src_ds.GetRasterBand(i).ReadRaster()
                 tmp_ds.GetRasterBand(i).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
                                                     data)
                 if idx_ifd == 0 or not compact_md:
-                    tmp_ds.GetRasterBand(i).SetDescription('latitude_offset' if i == 1 else 'longitude_offset')
+                    tmp_ds.GetRasterBand(i).SetDescription(
+                        'latitude_offset' if i == 1 else 'longitude_offset')
                     tmp_ds.GetRasterBand(i).SetUnitType('arc-second')
 
             if nbands == 4:
-                for i in (3,4):
+                for i in (3, 4):
                     data = src_ds.GetRasterBand(i).ReadRaster()
                     tmp_ds.GetRasterBand(i).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
                                                         data)
                     if idx_ifd == 0 or not compact_md:
-                        tmp_ds.GetRasterBand(i).SetDescription('latitude_offset_accuracy' if i == 3 else 'longitude_offset_accuracy')
+                        tmp_ds.GetRasterBand(i).SetDescription(
+                            'latitude_offset_accuracy' if i == 3 else 'longitude_offset_accuracy')
                         tmp_ds.GetRasterBand(i).SetUnitType('metre')
 
         dst_crs = osr.SpatialReference()
@@ -258,7 +263,8 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                     if src_date:
                         created_date = src_date
                 if src_date:
-                    year, month, day = get_year_month_day(src_date, src_basename)
+                    year, month, day = get_year_month_day(
+                        src_date, src_basename)
 
                     # Various sanity checks
                     assert day >= 1 and day <= 31
@@ -269,14 +275,18 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                     # except in Belgium where they work on sundays
                     # and in NZ on saturdays
                     if src_basename not in ('nzgd2kgrid0005.gsb', 'bd72lb72_etrs89lb08.gsb'):
-                        assert datetime.datetime(year, month, day).weekday() <= 4
+                        assert datetime.datetime(
+                            year, month, day).weekday() <= 4
 
                     # Sanity check that creation_date <= last_updated_date
                     if created_date:
-                        year_created, month_created, day_created = get_year_month_day(created_date, src_basename)
-                        assert year_created * 10000 + month_created * 100 + day_created <= year * 10000 + month * 100 + day
+                        year_created, month_created, day_created = get_year_month_day(
+                            created_date, src_basename)
+                        assert year_created * 10000 + month_created * 100 + \
+                            day_created <= year * 10000 + month * 100 + day
 
-                    extra_info.append('last updated on %04d-%02d-%02d' % (year, month, day))
+                    extra_info.append(
+                        'last updated on %04d-%02d-%02d' % (year, month, day))
 
             if extra_info:
                 desc += ' (' + ', '.join(extra_info) + ')'
@@ -370,7 +380,6 @@ def generate_optimized_file(tmpfilename, destfilename, args):
     signature = in_f.read(4)
     assert signature == b'\x49\x49\x2A\x00'
     next_ifd_offset = struct.unpack('<I', in_f.read(4))[0]
-    first_ifd_offset = next_ifd_offset
 
     out_f = open(destfilename, 'wb')
     out_f.write(signature)
@@ -427,7 +436,8 @@ def generate_optimized_file(tmpfilename, destfilename, args):
                 in_f.seek(curinoff)
 
                 if reuse_offlinedata and tagdata in offlinedata_to_offset:
-                    out_f.write(struct.pack('<I', offlinedata_to_offset[tagdata]))
+                    out_f.write(struct.pack(
+                        '<I', offlinedata_to_offset[tagdata]))
                 else:
                     tagdict[tagid] = OfflineTag(
                         tagtype, tagnvalues, tagdata, out_f.tell())
@@ -458,7 +468,8 @@ def generate_optimized_file(tmpfilename, destfilename, args):
 
         ifds.append(IFD(tagdict))
 
-    metadata_hint = ('-- Metadata size: %06d --\n' % out_f.tell()).encode('ASCII')
+    metadata_hint = ('-- Metadata size: %06d --\n' %
+                     out_f.tell()).encode('ASCII')
     assert len(metadata_hint) == len(dummy_metadata_hint)
     out_f.seek(essential_metadata_size_hint_offset_to_patch)
     out_f.write(metadata_hint)
