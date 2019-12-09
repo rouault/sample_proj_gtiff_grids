@@ -585,7 +585,7 @@ if __name__ == '__main__':
     gdal.Unlink(tmpfilename)
 
     if not args.datetime and args.datetime != 'NONE':
-        args.datetime = datetime.date.today().strftime("%Y-%m-%d %H:%M:%S")
+        args.datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")
 
     create_unoptimized_file(args.source, tmpfilename, args)
     generate_optimized_file(tmpfilename, args.dest, args)
