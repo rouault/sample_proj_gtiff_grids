@@ -205,7 +205,10 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                                       'nzgd2kgrid0005.gsb',
                                       'OSTN15_NTv2_OSGBtoETRS.gsb',
                                       'CHENyx06a.gsb',
-                                      'CHENyx06_ETRS.gsb',):
+                                      'CHENyx06_ETRS.gsb',
+                                      'A66_National_13_09_01.gsb',
+                                      'National_84_02_07_01.gsb',
+                                      'GDA94_GDA2020_conformal_and_distortion.gsb',):
                     args.accuracy_unit = 'arc-second'
 
                 else:
