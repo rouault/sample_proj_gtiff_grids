@@ -72,10 +72,24 @@ def get_args():
     parser.add_argument('--datetime', dest='datetime',
                         help='Value for TIFF DateTime tag as YYYY:MM:DD HH:MM:SS, or "NONE" to not write it. If not specified, current date time is used')
 
+    parser.add_argument('--accuracy-unit', dest='accuracy_unit',
+                        choices=['arc-second', 'metre'],
+                        help='Unit of accuracy channels')
+
     return parser.parse_args()
 
 
 def get_year_month_day(src_date, src_basename):
+    if len(src_date) == 4 and src_basename == 'GS7783.GSB':
+        # CREATED=1991
+        return int(src_date), 1, 1
+
+    if len(src_date) == 7 and src_basename == 'NB2783v2.GSB':
+        # CREATED=06/2011
+        month = int(src_date[0:2])
+        year = int(src_date[3:7])
+        return year, month, 1
+
     assert len(src_date) == 8
     if (src_date[2] == '-' and src_date[5] == '-') or \
             (src_date[2] == '/' and src_date[5] == '/'):
@@ -143,7 +157,55 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
         else:
             subgrids[parent_name] = [grid_name]
 
-    nbands = 2 if args.do_not_write_error_samples else 4
+    src_basename = os.path.basename(args.source)
+
+    if args.do_not_write_error_samples:
+        nbands = 2
+    else:
+        _, max = src_ds.GetRasterBand(3).ComputeRasterMinMax()
+        if max <= 0:
+            print('Omitting accuracy bands which contain only <= 0 values')
+            nbands = 2
+            args.do_not_write_error_samples = True
+        else:
+            if not args.accuracy_unit:
+                if src_basename in ('rdtrans2008.gsb',
+                                    'rdtrans2018.gsb',
+                                    'bd72lb72_etrs89lb08.gsb',
+                                    'ntv2_0.gsb',
+                                    'ABCSRSV4.GSB',
+                                    'BC_27_05.GSB',
+                                    'BC_93_05.GSB',
+                                    'CQ77SCRS.GSB',
+                                    'CRD27_00.GSB',
+                                    'CRD93_00.GSB',
+                                    'GS7783.GSB',
+                                    'NA27SCRS.GSB',
+                                    'NA83SCRS.GSB',
+                                    'NB2783v2.GSB',
+                                    'NB7783v2.GSB',
+                                    'NS778302.GSB',
+                                    'NVI93_05.GSB',
+                                    'ON27CSv1.GSB',
+                                    'ON76CSv1.GSB',
+                                    'ON83CSv1.GSB',
+                                    'PE7783V2.GSB',
+                                    'SK27-98.GSB',
+                                    'SK83-98.GSB',
+                                    'TO27CSv1.GSB',):
+                    args.accuracy_unit = 'metre'
+
+                elif src_basename in ('ntf_r93.gsb',
+                                      'nzgd2kgrid0005.gsb',
+                                      'OSTN15_NTv2_OSGBtoETRS.gsb',
+                                      'CHENyx06a.gsb',
+                                      'CHENyx06_ETRS.gsb',):
+                    args.accuracy_unit = 'arc-second'
+
+                else:
+                    raise Exception(
+                        '--accuracy-unit=arc-second/metre should be specified')
+            nbands = 4
 
     compact_md = True if len(subdatsets) > 50 else False
 
@@ -201,7 +263,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                     if idx_ifd == 0 or not compact_md:
                         tmp_ds.GetRasterBand(i).SetDescription(
                             'latitude_offset_accuracy' if i == 3 else 'longitude_offset_accuracy')
-                        tmp_ds.GetRasterBand(i).SetUnitType('metre')
+                        tmp_ds.GetRasterBand(i).SetUnitType(args.accuracy_unit)
 
         else:
             for i in (1, 2):
@@ -221,7 +283,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                     if idx_ifd == 0 or not compact_md:
                         tmp_ds.GetRasterBand(i).SetDescription(
                             'latitude_offset_accuracy' if i == 3 else 'longitude_offset_accuracy')
-                        tmp_ds.GetRasterBand(i).SetUnitType('metre')
+                        tmp_ds.GetRasterBand(i).SetUnitType(args.accuracy_unit)
 
         dst_crs = osr.SpatialReference()
         dst_crs.SetFromUserInput(args.target_crs)
@@ -248,7 +310,6 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                 if dst_auth_name and dst_auth_code:
                     desc += ' (' + dst_auth_name + ':' + dst_auth_code + ')'
                 desc += '. Converted from '
-                src_basename = os.path.basename(args.source)
                 desc += src_basename
 
                 version = src_ds.GetMetadataItem('VERSION').strip()
@@ -257,11 +318,19 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                     extra_info.append('version ' + version)
 
                 src_date = src_ds.GetMetadataItem('UPDATED').strip()
-                created_date = None
+                created_date = src_ds.GetMetadataItem('CREATED').strip()
                 if not src_date:
-                    src_date = src_ds.GetMetadataItem('CREATED').strip()
-                    if src_date:
-                        created_date = src_date
+                    src_date = created_date
+
+                if created_date and src_date and len(src_date) < len(created_date):
+                    # SK27-98.GSB
+                    #  CREATED=00-02-04
+                    #  UPDATED=0-15-00
+                    # SK83-98.GSB
+                    #  CREATED=98-12-18
+                    #  UPDATED=0-15-06
+                    src_date = created_date
+
                 if src_date:
                     year, month, day = get_year_month_day(
                         src_date, src_basename)
@@ -274,7 +343,13 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                     # assume agencies only work monday to friday...
                     # except in Belgium where they work on sundays
                     # and in NZ on saturdays
-                    if src_basename not in ('nzgd2kgrid0005.gsb', 'bd72lb72_etrs89lb08.gsb'):
+                    if src_basename not in ('nzgd2kgrid0005.gsb',
+                                            'bd72lb72_etrs89lb08.gsb',
+                                            'GS7783.GSB',
+                                            'NB2783v2.GSB',
+                                            'ON27CSv1.GSB',
+                                            'ON76CSv1.GSB',
+                                            ):
                         assert datetime.datetime(
                             year, month, day).weekday() <= 4
 
@@ -334,8 +409,12 @@ def generate_optimized_file(tmpfilename, destfilename, args):
 
     TIFFTAG_STRIPOFFSETS = 273
     TIFFTAG_STRIPBYTECOUNTS = 279
+    TIFFTAG_PLANARCONFIG = 284
     TIFFTAG_TILEOFFSETS = 324
     TIFFTAG_TILEBYTECOUNTS = 325
+
+    PLANARCONFIG_CONTIG = 1
+    PLANARCONFIG_SEPARATE = 2
 
     TIFFTAG_GDAL_METADATA = 42112
 
@@ -365,7 +444,9 @@ def generate_optimized_file(tmpfilename, destfilename, args):
             self.fileoffset_in_out_ifd = fileoffset_in_out_ifd
 
         def unpack_array(self):
-            if self.tagtype == TIFF_SHORT:
+            if type(self.data) == type((0,)):
+                return self.data
+            elif self.tagtype == TIFF_SHORT:
                 return struct.unpack('<' + ('H' * self.nvalues), self.data)
             elif self.tagtype == TIFF_LONG:
                 return struct.unpack('<' + ('I' * self.nvalues), self.data)
@@ -414,21 +495,44 @@ def generate_optimized_file(tmpfilename, destfilename, args):
         out_f.write(struct.pack('<H', numtags))
 
         tagdict = {}
+        ifd = IFD(tagdict)
 
         # Write IFD
         for i in range(numtags):
             tagid = struct.unpack('<H', in_f.read(2))[0]
             tagtype = struct.unpack('<H', in_f.read(2))[0]
             tagnvalues = struct.unpack('<I', in_f.read(4))[0]
-            tagvalueoroffset = struct.unpack('<I', in_f.read(4))[0]
+            tagvalueoroffset_raw = in_f.read(4)
+            tagvalueoroffset = struct.unpack('<I', tagvalueoroffset_raw)[0]
             #print(tagid, tagtype, tagnvalues, tagvalueoroffset)
             tagvalsize = typesize[tagtype] * tagnvalues
+
+            if tagid == TIFFTAG_PLANARCONFIG:
+                assert tagvalueoroffset in (
+                    PLANARCONFIG_CONTIG, PLANARCONFIG_SEPARATE)
+                ifd.planarconfig_contig = True if tagvalueoroffset == PLANARCONFIG_CONTIG else False
 
             out_f.write(struct.pack('<H', tagid))
             out_f.write(struct.pack('<H', tagtype))
             out_f.write(struct.pack('<I', tagnvalues))
             if tagvalsize <= 4:
-                out_f.write(struct.pack('<I', tagvalueoroffset))
+                if tagid in (TIFFTAG_STRIPOFFSETS, TIFFTAG_TILEOFFSETS):
+                    ifd.offset_out_offsets = out_f.tell()
+                    if tagtype == TIFF_SHORT:
+                        tagdict[tagid] = OfflineTag(
+                            tagtype, tagnvalues, struct.unpack('<HH', tagvalueoroffset_raw), -ifd.offset_out_offsets)
+                    elif tagtype == TIFF_LONG:
+                        tagdict[tagid] = OfflineTag(
+                            tagtype, tagnvalues, struct.unpack('<I', tagvalueoroffset_raw), -ifd.offset_out_offsets)
+                    out_f.write(struct.pack('<I', 0xDEADBEEF))  # placeholder
+                else:
+                    if tagtype == TIFF_SHORT:
+                        tagdict[tagid] = OfflineTag(
+                            tagtype, tagnvalues, struct.unpack('<HH', tagvalueoroffset_raw), -1)
+                    elif tagtype == TIFF_LONG:
+                        tagdict[tagid] = OfflineTag(
+                            tagtype, tagnvalues, struct.unpack('<I', tagvalueoroffset_raw), -1)
+                    out_f.write(struct.pack('<I', tagvalueoroffset))
             else:
                 curinoff = in_f.tell()
                 in_f.seek(tagvalueoroffset)
@@ -436,6 +540,8 @@ def generate_optimized_file(tmpfilename, destfilename, args):
                 in_f.seek(curinoff)
 
                 if reuse_offlinedata and tagdata in offlinedata_to_offset:
+                    tagdict[tagid] = OfflineTag(
+                        tagtype, tagnvalues, tagdata, -1)
                     out_f.write(struct.pack(
                         '<I', offlinedata_to_offset[tagdata]))
                 else:
@@ -452,6 +558,8 @@ def generate_optimized_file(tmpfilename, destfilename, args):
         # except the offset and byte count ones, and the GDAL metadata for the
         # IFDs after the first one, and patch IFD entries
         for id in tagdict:
+            if tagdict[id].fileoffset_in_out_ifd < 0:
+                continue
             if id in (TIFFTAG_STRIPOFFSETS, TIFFTAG_STRIPBYTECOUNTS,
                       TIFFTAG_TILEOFFSETS, TIFFTAG_TILEBYTECOUNTS):
                 continue
@@ -466,7 +574,7 @@ def generate_optimized_file(tmpfilename, destfilename, args):
             if reuse_offlinedata:
                 offlinedata_to_offset[tagdict[id].data] = cur_pos
 
-        ifds.append(IFD(tagdict))
+        ifds.append(ifd)
 
     metadata_hint = ('-- Metadata size: %06d --\n' %
                      out_f.tell()).encode('ASCII')
@@ -480,6 +588,8 @@ def generate_optimized_file(tmpfilename, destfilename, args):
         tagdict = ifd.tagdict
 
         for id in tagdict:
+            if tagdict[id].fileoffset_in_out_ifd < 0:
+                continue
             if id not in (TIFFTAG_STRIPOFFSETS, TIFFTAG_STRIPBYTECOUNTS,
                           TIFFTAG_TILEOFFSETS, TIFFTAG_TILEBYTECOUNTS):
                 continue
@@ -526,12 +636,16 @@ def generate_optimized_file(tmpfilename, destfilename, args):
             ifd.strile_length_in = \
                 tagdict[TIFFTAG_TILEBYTECOUNTS].unpack_array()
 
-        assert (ifd.num_striles % nbands) == 0
-
         ifd.strile_offset_out = [0] * ifd.num_striles
-        ifd.num_striles_per_band = ifd.num_striles // nbands
+        if ifd.planarconfig_contig:
+            ifd.num_striles_per_band = ifd.num_striles
+        else:
+            assert (ifd.num_striles % nbands) == 0
+            ifd.num_striles_per_band = ifd.num_striles // nbands
+
         for i in range(ifd.num_striles_per_band):
-            for iband in (0, 1):
+            list_bands = (0,) if ifd.planarconfig_contig else (0, 1)
+            for iband in list_bands:
                 idx_strile = ifd.num_striles_per_band * iband + i
                 in_f.seek(ifd.strile_offset_in[idx_strile])
                 data = in_f.read(ifd.strile_length_in[idx_strile])
@@ -539,7 +653,7 @@ def generate_optimized_file(tmpfilename, destfilename, args):
                 out_f.write(data)
 
     # And then the errors
-    if nbands == 4:
+    if nbands == 4 and not ifd.planarconfig_contig:
         for ifd in ifds:
             tagdict = ifd.tagdict
 
@@ -560,7 +674,11 @@ def generate_optimized_file(tmpfilename, destfilename, args):
         else:
             tagtype = tagdict[TIFFTAG_TILEOFFSETS].tagtype
 
-        out_f.seek(ifd.offset_out_offsets)
+        if ifd.offset_out_offsets < 0:
+            assert ifd.offset_out_offsets != -1
+            out_f.seek(-ifd.offset_out_offsets)
+        else:
+            out_f.seek(ifd.offset_out_offsets)
         if tagtype == TIFF_SHORT:
             for v in ifd.strile_offset_out:
                 assert v < 65536
