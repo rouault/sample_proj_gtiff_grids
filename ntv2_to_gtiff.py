@@ -37,9 +37,9 @@
 from osgeo import gdal
 from osgeo import osr
 import argparse
+import datetime
 import os
 import struct
-
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -68,7 +68,58 @@ def get_args():
                         action='store_true',
                         help='Use uint16 storage with linear scaling/offseting')
 
+    parser.add_argument('--datetime', dest='datetime',
+                        help='Value for TIFF DateTime tag as YYYY:MM:DD HH:MM:SS, or "NONE" to not write it. If not specified, current date time is used')
+
     return parser.parse_args()
+
+
+def get_year_month_day(src_date, src_basename):
+    assert len(src_date) == 8
+    if (src_date[2] == '-' and src_date[5] == '-') or \
+        (src_date[2] == '/' and src_date[5] == '/'):
+        if src_basename.startswith('rdtrans') or \
+            src_basename.startswith('ntf_r93') or \
+            src_basename.startswith('BWTA2017') or \
+            src_basename.startswith('BETA2007') or \
+            src_basename.startswith('D73_ETRS89_geo') or \
+            src_basename.startswith('DLx_ETRS89_geo'):
+            # rdtrans2018.gsb has 22-11-18 &
+            #ntf_r93.gsb has 31/10/07, hence D-M-Y
+            day = int(src_date[0:2])
+            month = int(src_date[3:5])
+            year = int(src_date[6:8])
+        else:
+            # CHENyx06a.gsb has 09-07-22 & ntv2_0.gsb and
+            # (other NRCan datasets) has 95-06-30, hence Y-M-D
+            year = int(src_date[0:2])
+            month = int(src_date[3:5])
+            day = int(src_date[6:8])
+        if year >= 90:
+            year += 1900
+        else:
+            assert year <= 50
+            year += 2000
+    else:
+        if src_basename in ('nzgd2kgrid0005.gsb',
+                            'A66_National_13_09_01.gsb',
+                            'National_84_02_07_01.gsb',
+                            'AT_GIS_GRID.gsb') or \
+            src_basename.startswith('GDA94_GDA2020'):
+            # nzgd2kgrid0005 has 20111999, hence D-M-Y
+            day = int(src_date[0:2])
+            month = int(src_date[2:4])
+            year = int(src_date[4:8])
+        elif src_basename == 'bd72lb72_etrs89lb08.gsb':
+            # bd72lb72_etrs89lb08 has 20142308, hence Y-D-M
+            year = int(src_date[0:4])
+            day = int(src_date[4:6])
+            month = int(src_date[6:8])
+        else:
+            year = int(src_date[0:4])
+            month = int(src_date[4:6])
+            day = int(src_date[6:8])
+    return year, month, day
 
 
 def create_unoptimized_file(sourcefilename, tmpfilename, args):
@@ -192,10 +243,49 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                 if dst_auth_name and dst_auth_code:
                     desc += ' (' + dst_auth_name + ':' + dst_auth_code + ')'
                 desc += '. Converted from '
-                desc += os.path.basename(args.source)
+                src_basename = os.path.basename(args.source)
+                desc += src_basename
+
+                version = src_ds.GetMetadataItem('VERSION').strip()
+                extra_info = []
+                if version not in ('NTv2.0',):
+                    extra_info.append('version ' + version)
+
+                src_date = src_ds.GetMetadataItem('UPDATED').strip()
+                created_date = None
+                if not src_date:
+                    src_date = src_ds.GetMetadataItem('CREATED').strip()
+                    if src_date:
+                        created_date = src_date
+                if src_date:
+                    year, month, day = get_year_month_day(src_date, src_basename)
+
+                    # Various sanity checks
+                    assert day >= 1 and day <= 31
+                    assert month >= 1 and month <= 12
+                    assert year >= 1980
+                    assert year <= datetime.datetime.now().year
+                    # assume agencies only work monday to friday...
+                    # except in Belgium where they work on sundays
+                    # and in NZ on saturdays
+                    if src_basename not in ('nzgd2kgrid0005.gsb', 'bd72lb72_etrs89lb08.gsb'):
+                        assert datetime.datetime(year, month, day).weekday() <= 4
+
+                    # Sanity check that creation_date <= last_updated_date
+                    if created_date:
+                        year_created, month_created, day_created = get_year_month_day(created_date, src_basename)
+                        assert year_created * 10000 + month_created * 100 + day_created <= year * 10000 + month * 100 + day
+
+                    extra_info.append('last updated on %04d-%02d-%02d' % (year, month, day))
+
+            if extra_info:
+                desc += ' (' + ', '.join(extra_info) + ')'
 
             tmp_ds.SetMetadataItem('TIFFTAG_IMAGEDESCRIPTION', desc)
-            tmp_ds.SetMetadataItem('TIFFTAG_COPYRIGHT', args.copyright)
+            if args.copyright:
+                tmp_ds.SetMetadataItem('TIFFTAG_COPYRIGHT', args.copyright)
+            if args.datetime and args.datetime != 'NONE':
+                tmp_ds.SetMetadataItem('TIFFTAG_DATETIME', args.datetime)
 
         options = ['PHOTOMETRIC=MINISBLACK',
                    'COMPRESS=DEFLATE',
@@ -482,6 +572,9 @@ if __name__ == '__main__':
 
     tmpfilename = args.dest + '.tmp'
     gdal.Unlink(tmpfilename)
+
+    if not args.datetime and args.datetime != 'NONE':
+        args.datetime = datetime.date.today().strftime("%Y-%m-%d %H:%M:%S")
 
     create_unoptimized_file(args.source, tmpfilename, args)
     generate_optimized_file(tmpfilename, args.dest, args)
