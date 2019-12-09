@@ -65,6 +65,12 @@ def get_args():
     parser.add_argument('--do-not-write-error-samples', dest='do_not_write_error_samples',
                         action='store_true')
 
+    parser.add_argument('--positive-longitude-shift-value',
+                        dest='positive_longitude_shift_value',
+                        choices=['east', 'west'],
+                        default='east',
+                        help='Whether positive values in the longitude_offset channel should be shift to the east or the west')
+
     parser.add_argument('--uint16-encoding', dest='uint16_encoding',
                         action='store_true',
                         help='Use uint16 storage with linear scaling/offseting')
@@ -223,22 +229,30 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
         tmp_ds.SetSpatialRef(src_crs)
         tmp_ds.SetGeoTransform(src_ds.GetGeoTransform())
         tmp_ds.SetMetadataItem('AREA_OR_POINT', 'Point')
-        tmp_ds.SetMetadataItem('TYPE', 'HORIZONTAL_OFFSET')
 
         grid_name = src_ds.GetMetadataItem('SUB_NAME')
         tmp_ds.SetMetadataItem('grid_name', grid_name)
         parent_name = src_ds.GetMetadataItem('PARENT')
-        if parent_name != 'NONE':
+        if parent_name == 'NONE':
+            tmp_ds.SetMetadataItem('TYPE', 'HORIZONTAL_OFFSET')
+        else:
             tmp_ds.SetMetadataItem('parent_name', parent_name)
         if grid_name in subgrids:
             tmp_ds.SetMetadataItem(
                 'number_of_nested_grids', str(len(subgrids[grid_name])))
+
+        if idx_ifd == 0 or not compact_md:
+            # Indicates that positive shift values are corrections to the west !
+            tmp_ds.GetRasterBand(2).SetMetadataItem('positive_value',
+                                                    args.positive_longitude_shift_value)
 
         if args.uint16_encoding:
             for i in (1, 2):
                 min, max = src_ds.GetRasterBand(i).ComputeRasterMinMax()
                 data = src_ds.GetRasterBand(i).ReadAsArray()
                 scale = (max - min) / 65535
+                if i == 2 and args.positive_longitude_shift_value == 'east':
+                    data = -data
                 data = (data - min) / scale
                 tmp_ds.GetRasterBand(i).WriteArray(data)
                 tmp_ds.GetRasterBand(i).SetOffset(min)
@@ -268,6 +282,12 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
         else:
             for i in (1, 2):
                 data = src_ds.GetRasterBand(i).ReadRaster()
+                if i == 2 and args.positive_longitude_shift_value == 'east':
+                    nvalues = src_ds.RasterXSize * src_ds.RasterYSize
+                    out_data = b''
+                    for v in struct.unpack('f' * nvalues, data):
+                        out_data += struct.pack('f', -v)
+                    data = out_data
                 tmp_ds.GetRasterBand(i).WriteRaster(0, 0, src_ds.RasterXSize, src_ds.RasterYSize,
                                                     data)
                 if idx_ifd == 0 or not compact_md:
@@ -576,6 +596,18 @@ def generate_optimized_file(tmpfilename, destfilename, args):
 
         ifds.append(ifd)
 
+    # Write GDAL_METADATA of ifds other than the first one
+    for ifd in ifds[1:]:
+        tagdict = ifd.tagdict
+
+        if TIFFTAG_GDAL_METADATA in tagdict:
+            id = TIFFTAG_GDAL_METADATA
+            cur_pos = out_f.tell()
+            out_f.seek(tagdict[id].fileoffset_in_out_ifd)
+            out_f.write(struct.pack('<I', cur_pos))
+            out_f.seek(cur_pos)
+            out_f.write(tagdict[id].data)
+
     metadata_hint = ('-- Metadata size: %06d --\n' %
                      out_f.tell()).encode('ASCII')
     assert len(metadata_hint) == len(dummy_metadata_hint)
@@ -604,18 +636,6 @@ def generate_optimized_file(tmpfilename, destfilename, args):
                 out_f.write(b'\00' * len(tagdict[id].data))
             else:
                 out_f.write(tagdict[id].data)  # bytecounts don't change
-
-    # Write GDAL_METADATA of ifds other than the first one
-    for ifd in ifds[1:]:
-        tagdict = ifd.tagdict
-
-        if TIFFTAG_GDAL_METADATA in tagdict:
-            id = TIFFTAG_GDAL_METADATA
-            cur_pos = out_f.tell()
-            out_f.seek(tagdict[id].fileoffset_in_out_ifd)
-            out_f.write(struct.pack('<I', cur_pos))
-            out_f.seek(cur_pos)
-            out_f.write(tagdict[id].data)
 
     nbands = 2 if args.do_not_write_error_samples else 4
 
@@ -712,8 +732,14 @@ def check(sourcefilename, destfilename, args):
         dst_ds = gdal.Open(dst_subds[0])
         if not args.uint16_encoding:
             for i in range(min(src_ds.RasterCount, dst_ds.RasterCount)):
-                assert src_ds.GetRasterBand(
-                    i+1).ReadRaster() == dst_ds.GetRasterBand(i+1).ReadRaster()
+                data = dst_ds.GetRasterBand(i+1).ReadRaster()
+                if i+1 == 2 and args.positive_longitude_shift_value == 'east':
+                    nvalues = src_ds.RasterXSize * src_ds.RasterYSize
+                    out_data = b''
+                    for v in struct.unpack('f' * nvalues, data):
+                        out_data += struct.pack('f', -v)
+                    data = out_data
+                assert src_ds.GetRasterBand(i+1).ReadRaster() == data
         else:
             import numpy as np
             for i in range(min(src_ds.RasterCount, dst_ds.RasterCount)):
@@ -721,7 +747,10 @@ def check(sourcefilename, destfilename, args):
                 dst_data = dst_ds.GetRasterBand(i+1).ReadAsArray()
                 offset = dst_ds.GetRasterBand(i+1).GetOffset()
                 scale = dst_ds.GetRasterBand(i+1).GetScale()
-                max_error = np.max(abs(dst_data * scale + offset - src_data))
+                dst_data = dst_data * scale + offset
+                if i+1 == 2 and args.positive_longitude_shift_value == 'east':
+                    dst_data = -dst_data
+                max_error = np.max(abs(dst_data - src_data))
                 assert max_error <= 1.01 * scale / 2, (max_error, scale / 2)
 
 
