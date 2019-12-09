@@ -695,6 +695,36 @@ def generate_optimized_file(tmpfilename, destfilename, args):
     out_f.close()
 
 
+def check(sourcefilename, destfilename, args):
+    src_ds = gdal.Open(sourcefilename)
+    assert src_ds.GetDriver().ShortName == 'NTv2'
+    src_subdatsets = [(sourcefilename, None)]
+    src_subdatsets += src_ds.GetSubDatasets()
+
+    dst_ds = gdal.Open(destfilename)
+    dst_subdatsets = dst_ds.GetSubDatasets()
+    if not dst_subdatsets:
+        dst_subdatsets = [(destfilename, None)]
+
+    assert len(src_subdatsets) == len(dst_subdatsets)
+    for src_subds, dst_subds in zip(src_subdatsets, dst_subdatsets):
+        src_ds = gdal.Open(src_subds[0])
+        dst_ds = gdal.Open(dst_subds[0])
+        if not args.uint16_encoding:
+            for i in range(min(src_ds.RasterCount, dst_ds.RasterCount)):
+                assert src_ds.GetRasterBand(
+                    i+1).ReadRaster() == dst_ds.GetRasterBand(i+1).ReadRaster()
+        else:
+            import numpy as np
+            for i in range(min(src_ds.RasterCount, dst_ds.RasterCount)):
+                src_data = src_ds.GetRasterBand(i+1).ReadAsArray()
+                dst_data = dst_ds.GetRasterBand(i+1).ReadAsArray()
+                offset = dst_ds.GetRasterBand(i+1).GetOffset()
+                scale = dst_ds.GetRasterBand(i+1).GetScale()
+                max_error = np.max(abs(dst_data * scale + offset - src_data))
+                assert max_error <= 1.01 * scale / 2, (max_error, scale / 2)
+
+
 if __name__ == '__main__':
 
     args = get_args()
@@ -707,5 +737,6 @@ if __name__ == '__main__':
 
     create_unoptimized_file(args.source, tmpfilename, args)
     generate_optimized_file(tmpfilename, args.dest, args)
+    check(args.source, args.dest, args)
 
     gdal.Unlink(tmpfilename)
