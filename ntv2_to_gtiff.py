@@ -66,7 +66,7 @@ def get_args():
 
     parser.add_argument('--uint16-encoding', dest='uint16_encoding',
                         action='store_true',
-                        description='Use uint16 storage with linear scaling/offseting')
+                        help='Use uint16 storage with linear scaling/offseting')
 
     return parser.parse_args()
 
