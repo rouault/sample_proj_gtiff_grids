@@ -30,6 +30,7 @@
 
 from osgeo import gdal
 from osgeo import osr
+import datetime
 import struct
 
 # https://geodesie.ign.fr/contenu/fichiers/gr3df97a.txt
@@ -72,6 +73,8 @@ with open('gr3df97a.txt', 'rt') as f:
                 'TIFFTAG_COPYRIGHT', 'Derived from work by IGN France. Open License https://www.etalab.gouv.fr/wp-content/uploads/2014/05/Open_Licence.pdf')
             ds.SetMetadataItem('TIFFTAG_IMAGEDESCRIPTION',
                                'Geocentric translation from NTF (IGNF:NTF) to RGF93 (EPSG:4964). Converted from gr3df97a.txt')
+            datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")
+            ds.SetMetadataItem('TIFFTAG_DATETIME', datetime)
             ds.SetMetadataItem('AREA_OR_POINT', 'Point')
             ds.SetMetadataItem('TYPE', 'GEOCENTRIC_TRANSLATION')
             ds.SetMetadataItem('source_crs_wkt', """GEODCRS["NTF cartesiennes",
