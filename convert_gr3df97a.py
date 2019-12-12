@@ -71,7 +71,7 @@ with open('gr3df97a.txt', 'rt') as f:
             ds.SetMetadataItem(
                 'TIFFTAG_COPYRIGHT', 'Derived from work by IGN France. Open License https://www.etalab.gouv.fr/wp-content/uploads/2014/05/Open_Licence.pdf')
             ds.SetMetadataItem('TIFFTAG_IMAGEDESCRIPTION',
-                               'Geocentric translation from NTF (IGNF:NTF) to RGF93 (EPSG:4964). Converted from gr3df97a.tif')
+                               'Geocentric translation from NTF (IGNF:NTF) to RGF93 (EPSG:4964). Converted from gr3df97a.txt')
             ds.SetMetadataItem('AREA_OR_POINT', 'Point')
             ds.SetMetadataItem('TYPE', 'GEOCENTRIC_TRANSLATION')
             ds.SetMetadataItem('source_crs_wkt', """GEODCRS["NTF cartesiennes",
