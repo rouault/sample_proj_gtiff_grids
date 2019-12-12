@@ -154,14 +154,14 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
     subgrids = {}
     for subds in subdatsets:
         src_ds = gdal.Open(subds[0])
-        parent_name = src_ds.GetMetadataItem('PARENT')
-        if parent_name == 'NONE':
+        parent_grid_name = src_ds.GetMetadataItem('PARENT')
+        if parent_grid_name == 'NONE':
             continue
         grid_name = src_ds.GetMetadataItem('SUB_NAME')
-        if parent_name in subgrids:
-            subgrids[parent_name].append(grid_name)
+        if parent_grid_name in subgrids:
+            subgrids[parent_grid_name].append(grid_name)
         else:
-            subgrids[parent_name] = [grid_name]
+            subgrids[parent_grid_name] = [grid_name]
 
     src_basename = os.path.basename(args.source)
 
@@ -235,11 +235,11 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
 
         grid_name = src_ds.GetMetadataItem('SUB_NAME')
         tmp_ds.SetMetadataItem('grid_name', grid_name)
-        parent_name = src_ds.GetMetadataItem('PARENT')
-        if parent_name == 'NONE':
+        parent_grid_name = src_ds.GetMetadataItem('PARENT')
+        if parent_grid_name == 'NONE':
             tmp_ds.SetMetadataItem('TYPE', 'HORIZONTAL_OFFSET')
         else:
-            tmp_ds.SetMetadataItem('parent_name', parent_name)
+            tmp_ds.SetMetadataItem('parent_grid_name', parent_grid_name)
         if grid_name in subgrids:
             tmp_ds.SetMetadataItem(
                 'number_of_nested_grids', str(len(subgrids[grid_name])))
