@@ -156,7 +156,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                 min, max = src_ds.GetRasterBand(i).ComputeRasterMinMax()
                 data = src_ds.GetRasterBand(i).ReadAsArray()
                 if is_vertcon:  # in millimetres originally !
-                    assert min < -100 and max > 100
+                    assert min < -100 or max > 100
                     min = min * 0.001
                     max = max * 0.001
 
@@ -241,7 +241,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
 
                 if is_vertcon:  # in millimetres originally !
                     min, max = src_ds.GetRasterBand(i).ComputeRasterMinMax()
-                    assert min < -100 and max > 100
+                    assert min < -100 or max > 100
                     assert src_ds.GetRasterBand(1).DataType == gdal.GDT_Float32
                     out_data = b''
                     for v in struct.unpack('f' * nvalues, data):

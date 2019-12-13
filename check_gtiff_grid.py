@@ -169,7 +169,7 @@ def validate_horizontal_offset(ds, is_first_subds):
                 if is_first_subds:
                     warnings.append(
                         "One of latitude_offset_accuracy/longitude_offset_accuracy band is missing units description.")
-            elif units not in ('arc-second', 'degree', 'radians', 'metre'):
+            elif units not in ('arc-second', 'degree', 'radians', 'metre', 'unknown'):
                 errors.append(
                     "One of latitude_offset_accuracy/longitude_offset_accuracy band is using a unit not supported by PROJ")
 
@@ -490,8 +490,8 @@ def validate_ifd(global_info, ds, is_first_subds, first_subds):
             parent_xmin, parent_ymin, parent_xmax, parent_ymax = get_extent(
                 parent_ds)
             xmin, ymin, xmax, ymax = get_extent(ds)
-            if not (xmin >= parent_xmin and ymin >= parent_ymin and xmax <= parent_xmax and ymax <= parent_ymax):
-                errors.append('Grid extent is not inside its parent extent')
+            if not (xmin+1e-10 >= parent_xmin and ymin+1e-10 >= parent_ymin and xmax-1e-10 <= parent_xmax and ymax-1e-10 <= parent_ymax):
+                errors.append('Extent (%f,%f,%f,%f) of grid %s is not inside its parent %s extent (%f,%f,%f,%f)' % (xmin, ymin, xmax, ymax, grid_name if grid_name else 'unknown', parent_grid_name, parent_xmin, parent_ymin, parent_xmax, parent_ymax))
 
     # Check for well kown metadata item names
     md = ds.GetMetadata_Dict()
