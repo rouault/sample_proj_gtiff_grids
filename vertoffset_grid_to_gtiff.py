@@ -69,9 +69,11 @@ def get_args():
     parser.add_argument('--description', dest='description',
                         help='Description')
 
-    parser.add_argument('--uint16-encoding', dest='uint16_encoding',
-                        action='store_true',
-                        help='Use uint16 storage with linear scaling/offseting')
+    parser.add_argument('--encoding',
+                        dest='encoding',
+                        choices=['float32', 'uint16', 'int32-scale-1-1000'],
+                        default='float32',
+                        help='Binary encoding. int32-scale-1-1000 is for for Canadian .byn')
 
     parser.add_argument('--ignore-nodata', dest='ignore_nodata',
                         action='store_true',
@@ -100,11 +102,17 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
     for idx_ifd, subds in enumerate(subdatsets):
         src_ds = gdal.Open(subds[0])
 
+        if args.encoding == 'int32-scale-1-1000':
+            target_dt = gdal.GDT_Int32
+        elif args.encoding == 'uint16':
+            target_dt = gdal.GDT_UInt16
+        else:
+            target_dt = gdal.GDT_Float32
         tmp_ds = gdal.GetDriverByName('GTiff').Create('/vsimem/tmp',
                                                       src_ds.RasterXSize,
                                                       src_ds.RasterYSize,
                                                       nbands,
-                                                      gdal.GDT_Float32 if not args.uint16_encoding else gdal.GDT_UInt16)
+                                                      target_dt)
         interpolation_crs = osr.SpatialReference()
         if args.type == 'GEOGRAPHIC_TO_VERTICAL':
             interpolation_crs.SetFromUserInput(args.source_crs)
@@ -151,7 +159,48 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
         def is_false_positive_nodata(y, x):
             return src_basename == 'egm08_25.gtx' and y == 2277 and x == 6283
 
-        if args.uint16_encoding:
+        if args.encoding == 'int32-scale-1-1000':
+            assert src_ds.RasterCount == 1
+            scale = 0.001
+            nodata = None if args.ignore_nodata else src_ds.GetRasterBand(
+                1).GetNoDataValue()
+            data = src_ds.GetRasterBand(1).ReadAsArray()
+            if nodata is None:
+                data = data / scale
+            else:
+                dst_nodata = 9999000
+                nodata_as_f = struct.pack('f', nodata)
+                has_warned_nodata = False
+                for y in range(src_ds.RasterYSize):
+                    for x in range(src_ds.RasterXSize):
+                        is_nodata = False
+                        if struct.pack('f', data[y][x]) == nodata_as_f:
+                            if is_false_positive_nodata(y, x):
+                                pass
+                            elif not has_warned_nodata:
+                                print(
+                                    'At least one value matches nodata (at %d,%d). Setting it' % (y, x))
+                                tmp_ds.GetRasterBand(
+                                    1).SetNoDataValue(dst_nodata)
+                                has_warned_nodata = True
+                                is_nodata = True
+                            else:
+                                is_nodata = True
+
+                        if is_nodata:
+                            data[y][x] = dst_nodata
+                        else:
+                            data[y][x] = data[y][x] / scale
+
+            tmp_ds.GetRasterBand(1).WriteArray(data)
+            tmp_ds.GetRasterBand(1).SetOffset(0)
+            tmp_ds.GetRasterBand(1).SetScale(scale)
+            if idx_ifd == 0 or not compact_md:
+                tmp_ds.GetRasterBand(1).SetDescription(
+                    'geoid_undulation' if args.type == 'GEOGRAPHIC_TO_VERTICAL' else 'vertical_offset')
+                tmp_ds.GetRasterBand(1).SetUnitType('metre')
+
+        elif args.encoding == 'uint16':
             for i in (1, ):
                 min, max = src_ds.GetRasterBand(i).ComputeRasterMinMax()
                 data = src_ds.GetRasterBand(i).ReadAsArray()
@@ -163,7 +212,8 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                 dst_nodata = 65535
                 scale = (max - min) / 65534  # we use 65535 for nodata
 
-                nodata = None if args.ignore_nodata else src_ds.GetRasterBand(i).GetNoDataValue()
+                nodata = None if args.ignore_nodata else src_ds.GetRasterBand(
+                    i).GetNoDataValue()
                 if nodata is None:
                     if is_vertcon:  # in millimetres originally !
                         data = data * 0.001
@@ -175,7 +225,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                         for x in range(src_ds.RasterXSize):
                             is_nodata = False
                             if struct.pack('f', data[y][x]) == nodata_as_f:
-                                if is_false_positive_nodata(y,x):
+                                if is_false_positive_nodata(y, x):
                                     pass
                                 elif not has_warned_nodata:
                                     print(
@@ -208,7 +258,8 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
             for i in (1,):
                 data = src_ds.GetRasterBand(i).ReadRaster()
 
-                nodata = None if args.ignore_nodata else src_ds.GetRasterBand(i).GetNoDataValue()
+                nodata = None if args.ignore_nodata else src_ds.GetRasterBand(
+                    i).GetNoDataValue()
                 nvalues = src_ds.RasterXSize * src_ds.RasterYSize
                 dst_nodata = -32768
                 if nodata:
@@ -221,10 +272,11 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                         if struct.pack('f', v) == nodata_as_f:
                             y = idx // src_ds.RasterXSize
                             x = idx % src_ds.RasterXSize
-                            if is_false_positive_nodata(y,x):
+                            if is_false_positive_nodata(y, x):
                                 pass
                             elif not has_warned_nodata:
-                                print('At least one value matches nodata (at idx %d,%d). Setting it' % (y, x))
+                                print(
+                                    'At least one value matches nodata (at idx %d,%d). Setting it' % (y, x))
                                 tmp_ds.GetRasterBand(
                                     i).SetNoDataValue(dst_nodata)
                                 has_warned_nodata = True
@@ -284,7 +336,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
 
         options = ['PHOTOMETRIC=MINISBLACK',
                    'COMPRESS=DEFLATE',
-                   'PREDICTOR=3' if not args.uint16_encoding else 'PREDICTOR=2',
+                   'PREDICTOR=3' if target_dt == gdal.GDT_Float32 else 'PREDICTOR=2',
                    'INTERLEAVE=BAND',
                    'GEOTIFF_VERSION=1.1']
         if tmp_ds.RasterXSize > 256 and tmp_ds.RasterYSize > 256:

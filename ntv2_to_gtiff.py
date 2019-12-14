@@ -295,14 +295,16 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
 
         else:
             for i in (1, 2):
-                data = src_ds.GetRasterBand(i).ReadRaster(buf_type = gdal.GDT_Float32)
+                data = src_ds.GetRasterBand(i).ReadRaster(
+                    buf_type=gdal.GDT_Float32)
 
                 if src_ds.GetDriver().ShortName == 'CTable2':
                     nvalues = src_ds.RasterXSize * src_ds.RasterYSize
                     out_data = b''
                     # From radian to arc-seconds
                     for v in struct.unpack('f' * nvalues, data):
-                        out_data += struct.pack('f', v / math.pi * 180.0 * 3600)
+                        out_data += struct.pack('f',
+                                                v / math.pi * 180.0 * 3600)
                     data = out_data
 
                 if i == 2 and args.positive_longitude_shift_value == 'east':
@@ -454,14 +456,16 @@ def check(sourcefilename, destfilename, args):
         dst_ds = gdal.Open(dst_subds[0])
         if not args.uint16_encoding:
             for i in range(min(src_ds.RasterCount, dst_ds.RasterCount)):
-                data = src_ds.GetRasterBand(i+1).ReadRaster(buf_type = gdal.GDT_Float32)
+                data = src_ds.GetRasterBand(
+                    i+1).ReadRaster(buf_type=gdal.GDT_Float32)
 
                 if src_ds.GetDriver().ShortName == 'CTable2':
                     nvalues = src_ds.RasterXSize * src_ds.RasterYSize
                     out_data = b''
                     # From radian to arc-seconds
                     for v in struct.unpack('f' * nvalues, data):
-                        out_data += struct.pack('f', v / math.pi * 180.0 * 3600)
+                        out_data += struct.pack('f',
+                                                v / math.pi * 180.0 * 3600)
                     data = out_data
 
                 if i+1 == 2 and args.positive_longitude_shift_value == 'east':
