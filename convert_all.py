@@ -42,12 +42,22 @@ def get_args():
         description='Convert proj-datumgrid to GeoTIFF.')
     parser.add_argument('proj_datumgrid',
                         help='proj-datumgrid directory')
+    parser.add_argument('target_dir',
+                        help='target directory')
+
+    parser.add_argument('--overwrite',
+                        action='store_true', default=False,
+                        help='Overwrite grids already existing in target dir')
 
     return parser.parse_args()
 
 
-proj_datumgrid = get_args().proj_datumgrid
+args = get_args()
+proj_datumgrid = args.proj_datumgrid
+target_dir = args.target_dir
 
+if not os.path.exists(target_dir):
+    os.mkdir(target_dir, 0755)
 
 class Obj(object):
     pass
@@ -62,96 +72,102 @@ with open(os.path.join(proj_datumgrid, 'filelist.csv')) as f:
                            'interpolation_crs', 'agency_name', 'source', 'licence']
             first_line = False
             continue
-        filename, type, unit, source_crs, target_crs, interpolation_crs, _, source, licence = row
+        src_filename, type, unit, source_crs, target_crs, interpolation_crs, agency_name, source, licence = row
 
+        filename = None
         for subdir in ('.', 'europe', 'north-america', 'oceania', 'world'):
-            candidate_filename = os.path.join(proj_datumgrid, subdir, filename)
+            candidate_filename = os.path.join(proj_datumgrid, subdir, src_filename)
             if os.path.exists(candidate_filename):
                 filename = candidate_filename
                 break
+
+        if not filename:
+            print('Cannot find ' + src_filename)
+            continue
+
+        this_file_target_dir = os.path.join(target_dir, agency_name)
+        if not os.path.exists(this_file_target_dir):
+            os.mkdir(this_file_target_dir, 0755)
 
         #if os.path.basename(filename).startswith('HT2_'):
         #    pass
         #else:
         #    continue
 
+        cvt_args = Obj()
+        cvt_args.source = filename
+        cvt_args.dest = os.path.join(this_file_target_dir,os.path.splitext(
+            os.path.basename(filename))[0] + ".tif")
+
+        if os.path.exists(cvt_args.dest) and not args.overwrite:
+            print('Skipping ' + cvt_args.source)
+            continue
+
         if type == 'HORIZONTAL_OFFSET':
             print('Processing ' + filename)
-            args = Obj()
-            args.source = filename
-            args.dest = os.path.splitext(
-                os.path.basename(filename))[0] + ".tif"
-            args.do_not_write_error_samples = False
-            args.accuracy_unit = None
-            args.source_crs = source_crs
-            args.target_crs = target_crs
-            args.description = None
-            args.copyright = "Derived from work by " + source + ". " + licence
-            args.accuracy_unit = 'unknown' if os.path.basename(filename) in (
+            cvt_args.do_not_write_error_samples = False
+            cvt_args.accuracy_unit = None
+            cvt_args.source_crs = source_crs
+            cvt_args.target_crs = target_crs
+            cvt_args.description = None
+            cvt_args.copyright = "Derived from work by " + source + ". " + licence
+            cvt_args.accuracy_unit = 'unknown' if os.path.basename(filename) in (
                 'BWTA2017.gsb', 'DLx_ETRS89_geo.gsb', 'D73_ETRS89_geo.gsb') else None
-            args.uint16_encoding = False
-            args.positive_longitude_shift_value = 'east'
-            args.datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")
+            cvt_args.uint16_encoding = False
+            cvt_args.positive_longitude_shift_value = 'east'
+            cvt_args.datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")
 
-            tmpfilename = args.dest + '.tmp'
+            tmpfilename = cvt_args.dest + '.tmp'
             gdal.Unlink(tmpfilename)
             ntv2_to_gtiff.create_unoptimized_file(
-                args.source, tmpfilename, args)
-            ntv2_to_gtiff.generate_optimized_file(tmpfilename, args.dest)
-            ntv2_to_gtiff.check(args.source, args.dest, args)
+                cvt_args.source, tmpfilename, cvt_args)
+            ntv2_to_gtiff.generate_optimized_file(tmpfilename, cvt_args.dest)
+            ntv2_to_gtiff.check(cvt_args.source, cvt_args.dest, cvt_args)
 
             gdal.Unlink(tmpfilename)
 
         elif type == 'VERTICAL_OFFSET_GEOGRAPHIC_TO_VERTICAL':
             print('Processing ' + filename)
-            args = Obj()
-            args.source = filename
-            args.dest = os.path.splitext(
-                os.path.basename(filename))[0] + ".tif"
-            args.source_crs = source_crs
-            args.target_crs = target_crs
-            args.description = None
-            args.copyright = "Derived from work by " + source + ". " + licence
-            args.datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")
-            args.type = 'GEOGRAPHIC_TO_VERTICAL'
-            args.encoding = 'int32-scale-1-1000' if os.path.basename(filename).startswith(
+            cvt_args.source_crs = source_crs
+            cvt_args.target_crs = target_crs
+            cvt_args.description = None
+            cvt_args.copyright = "Derived from work by " + source + ". " + licence
+            cvt_args.datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")
+            cvt_args.type = 'GEOGRAPHIC_TO_VERTICAL'
+            cvt_args.encoding = 'int32-scale-1-1000' if os.path.basename(filename).startswith(
                 'CGG') or os.path.basename(filename).startswith('HT2_') else 'float32'
-            args.ignore_nodata = None
+            cvt_args.ignore_nodata = None
 
-            tmpfilename = args.dest + '.tmp'
+            tmpfilename = cvt_args.dest + '.tmp'
             gdal.Unlink(tmpfilename)
             vertoffset_grid_to_gtiff.create_unoptimized_file(
-                args.source, tmpfilename, args)
+                cvt_args.source, tmpfilename, cvt_args)
             vertoffset_grid_to_gtiff.generate_optimized_file(
-                tmpfilename, args.dest)
-            vertoffset_grid_to_gtiff.check(args.source, args.dest, args)
+                tmpfilename, cvt_args.dest)
+            vertoffset_grid_to_gtiff.check(cvt_args.source, cvt_args.dest, cvt_args)
 
             gdal.Unlink(tmpfilename)
 
         elif type == 'VERTICAL_OFFSET_VERTICAL_TO_VERTICAL':
             print('Processing ' + filename)
-            args = Obj()
-            args.source = filename
-            args.dest = os.path.splitext(
-                os.path.basename(filename))[0] + ".tif"
-            args.source_crs = source_crs
-            args.target_crs = target_crs
+            cvt_args.source_crs = source_crs
+            cvt_args.target_crs = target_crs
             assert 'vertcon' in filename
-            args.interpolation_crs = 'EPSG:4267'
-            args.description = None
-            args.copyright = "Derived from work by " + source + ". " + licence
-            args.datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")
-            args.type = 'VERTICAL_TO_VERTICAL'
-            args.encoding = 'float32'
-            args.ignore_nodata = None
+            cvt_args.interpolation_crs = 'EPSG:4267'
+            cvt_args.description = None
+            cvt_args.copyright = "Derived from work by " + source + ". " + licence
+            cvt_args.datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")
+            cvt_args.type = 'VERTICAL_TO_VERTICAL'
+            cvt_args.encoding = 'float32'
+            cvt_args.ignore_nodata = None
 
-            tmpfilename = args.dest + '.tmp'
+            tmpfilename = cvt_args.dest + '.tmp'
             gdal.Unlink(tmpfilename)
             vertoffset_grid_to_gtiff.create_unoptimized_file(
-                args.source, tmpfilename, args)
+                cvt_args.source, tmpfilename, cvt_args)
             vertoffset_grid_to_gtiff.generate_optimized_file(
-                tmpfilename, args.dest)
-            vertoffset_grid_to_gtiff.check(args.source, args.dest, args)
+                tmpfilename, cvt_args.dest)
+            vertoffset_grid_to_gtiff.check(cvt_args.source, cvt_args.dest, cvt_args)
 
             gdal.Unlink(tmpfilename)
 
