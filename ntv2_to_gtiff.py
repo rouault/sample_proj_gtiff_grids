@@ -185,6 +185,7 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                                     'rdtrans2018.gsb',
                                     'bd72lb72_etrs89lb08.gsb',
                                     'ntv2_0.gsb',
+                                    'MAY76V20.gsb',
                                     'ABCSRSV4.GSB',
                                     'BC_27_05.GSB',
                                     'BC_93_05.GSB',
