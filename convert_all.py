@@ -152,7 +152,7 @@ with open(os.path.join(proj_datumgrid, 'filelist.csv')) as f:
             print('Processing ' + filename)
             cvt_args.source_crs = source_crs
             cvt_args.target_crs = target_crs
-            assert 'vertcon' in filename
+            assert 'vertcon' in filename or '-nzvd2016.gtx' in filename
             cvt_args.interpolation_crs = 'EPSG:4267'
             cvt_args.description = None
             cvt_args.copyright = "Derived from work by " + source + ". " + licence
