@@ -57,7 +57,7 @@ proj_datumgrid = args.proj_datumgrid
 target_dir = args.target_dir
 
 if not os.path.exists(target_dir):
-    os.mkdir(target_dir, 0755)
+    os.mkdir(target_dir)
 
 class Obj(object):
     pass
@@ -87,7 +87,7 @@ with open(os.path.join(proj_datumgrid, 'filelist.csv')) as f:
 
         this_file_target_dir = os.path.join(target_dir, agency_name)
         if not os.path.exists(this_file_target_dir):
-            os.mkdir(this_file_target_dir, 0755)
+            os.mkdir(this_file_target_dir)
 
         #if os.path.basename(filename).startswith('HT2_'):
         #    pass

@@ -402,6 +402,10 @@ def validate_ifd(global_info, ds, is_first_subds, first_subds):
         warnings.append("TYPE=%s is not recognize by PROJ" % type)
 
     if is_first_subds:
+        if not ds.GetMetadataItem('area_of_use'):
+            warnings.append(
+                "GDAL area_of_use metadata item is missing. Typically used to capture plain text information about where the grid applies")
+
         if not ds.GetMetadataItem('TIFFTAG_IMAGEDESCRIPTION'):
             warnings.append(
                 "TIFF tag ImageDescription is missing. Typically used to capture plain text information about what the grid does")
