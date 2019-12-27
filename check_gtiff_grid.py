@@ -499,6 +499,7 @@ def validate_ifd(global_info, ds, is_first_subds, first_subds):
     md_keys = md.keys()
     for key in md_keys:
         if key not in ('AREA_OR_POINT', 'TYPE',
+                       'area_of_use',
                        'grid_name',
                        'parent_grid_name',
                        'source_crs_epsg_code', 'source_crs_wkt',

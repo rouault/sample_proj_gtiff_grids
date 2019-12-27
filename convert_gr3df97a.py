@@ -77,6 +77,7 @@ with open('gr3df97a.txt', 'rt') as f:
             ds.SetMetadataItem('TIFFTAG_DATETIME', datetime)
             ds.SetMetadataItem('AREA_OR_POINT', 'Point')
             ds.SetMetadataItem('TYPE', 'GEOCENTRIC_TRANSLATION')
+            ds.SetMetadataItem('area_of_use', 'France')
             ds.SetMetadataItem('source_crs_wkt', """GEODCRS["NTF cartesiennes",
     DATUM["Nouvelle Triangulation Francaise",
         ELLIPSOID["Clarke 1880 (IGN)",6378249.2,293.466021293627,

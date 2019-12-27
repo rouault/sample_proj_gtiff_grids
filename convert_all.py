@@ -68,11 +68,11 @@ with open(os.path.join(proj_datumgrid, 'filelist.csv')) as f:
     first_line = True
     for row in reader:
         if first_line:
-            assert row == ['filename', 'type', 'unit', 'source_crs', 'target_crs',
+            assert row == ['filename', 'type', 'area', 'unit', 'source_crs', 'target_crs',
                            'interpolation_crs', 'agency_name', 'source', 'licence']
             first_line = False
             continue
-        src_filename, type, unit, source_crs, target_crs, interpolation_crs, agency_name, source, licence = row
+        src_filename, type, area, unit, source_crs, target_crs, interpolation_crs, agency_name, source, licence = row
 
         filename = None
         for subdir in ('.', 'europe', 'north-america', 'oceania', 'world'):
@@ -116,6 +116,7 @@ with open(os.path.join(proj_datumgrid, 'filelist.csv')) as f:
             cvt_args.uint16_encoding = False
             cvt_args.positive_longitude_shift_value = 'east'
             cvt_args.datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")
+            cvt_args.area_of_use = area
 
             tmpfilename = cvt_args.dest + '.tmp'
             gdal.Unlink(tmpfilename)
@@ -137,6 +138,7 @@ with open(os.path.join(proj_datumgrid, 'filelist.csv')) as f:
             cvt_args.encoding = 'int32-scale-1-1000' if os.path.basename(filename).startswith(
                 'CGG') or os.path.basename(filename).startswith('HT2_') else 'float32'
             cvt_args.ignore_nodata = None
+            cvt_args.area_of_use = area
 
             tmpfilename = cvt_args.dest + '.tmp'
             gdal.Unlink(tmpfilename)
@@ -160,6 +162,7 @@ with open(os.path.join(proj_datumgrid, 'filelist.csv')) as f:
             cvt_args.type = 'VERTICAL_TO_VERTICAL'
             cvt_args.encoding = 'float32'
             cvt_args.ignore_nodata = None
+            cvt_args.area_of_use = area
 
             tmpfilename = cvt_args.dest + '.tmp'
             gdal.Unlink(tmpfilename)

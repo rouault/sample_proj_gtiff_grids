@@ -82,6 +82,9 @@ def get_args():
     parser.add_argument('--datetime', dest='datetime',
                         help='Value for TIFF DateTime tag as YYYY:MM:DD HH:MM:SS, or "NONE" to not write it. If not specified, current date time is used')
 
+    parser.add_argument('--area-of-use', dest='area_of_use',
+                        help='Area of use')
+
     return parser.parse_args()
 
 
@@ -333,6 +336,8 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                 tmp_ds.SetMetadataItem('TIFFTAG_COPYRIGHT', args.copyright)
             if args.datetime and args.datetime != 'NONE':
                 tmp_ds.SetMetadataItem('TIFFTAG_DATETIME', args.datetime)
+            if args.area_of_use:
+                tmp_ds.SetMetadataItem('area_of_use', args.area_of_use)
 
         options = ['PHOTOMETRIC=MINISBLACK',
                    'COMPRESS=DEFLATE',
