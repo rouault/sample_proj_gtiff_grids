@@ -49,6 +49,9 @@ def get_args():
                         action='store_true', default=False,
                         help='Overwrite grids already existing in target dir')
 
+    parser.add_argument('--only',
+                        help='Convert only mentionned grid')
+
     return parser.parse_args()
 
 
@@ -89,10 +92,11 @@ with open(os.path.join(proj_datumgrid, 'filelist.csv')) as f:
         if not os.path.exists(this_file_target_dir):
             os.mkdir(this_file_target_dir)
 
-        #if os.path.basename(filename).startswith('HT2_'):
-        #    pass
-        #else:
-        #    continue
+        if args.only:
+            if os.path.basename(filename) == args.only:
+                pass
+            else:
+                continue
 
         cvt_args = Obj()
         cvt_args.source = filename
