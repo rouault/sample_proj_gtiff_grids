@@ -282,8 +282,8 @@ def validate_geocentric_translation(ds, is_first_subds):
         if not target_crs.IsGeocentric():
             errors.append("target_crs found, but not a geocentric CRS")
 
-    if ds.RasterCount < 2:
-        return infos, warnings, ["TYPE=HORIZONTAL_OFFSET should have at least 2 bands"]
+    if ds.RasterCount < 3:
+        return infos, warnings, ["TYPE=GEOCENTRIC_TRANSLATION should have at least 3 bands"]
 
     x_idx = 0
     y_idx = 0
@@ -330,6 +330,64 @@ def validate_geocentric_translation(ds, is_first_subds):
         elif units not in ('metre',):
             errors.append(
                 "One of x_translation/y_translation/z_translation band is using a unit not supported by PROJ")
+
+    return infos, warnings, errors
+
+
+def validate_velocity(ds, is_first_subds):
+
+    infos = []
+    warnings = []
+    errors = []
+
+    if ds.RasterCount < 3:
+        return infos, warnings, ["TYPE=VELOCITY should have at least 3 bands"]
+
+    x_idx = 0
+    y_idx = 0
+    z_idx = 0
+    for i in range(ds.RasterCount):
+        b = ds.GetRasterBand(i+1)
+        desc = b.GetDescription()
+        if desc == 'east_velocity':
+            if x_idx > 0:
+                return infos, warnings, ["At least, 2 bands are tagged with Description = east_velocity"]
+            x_idx = i+1
+        elif desc == 'north_velocity':
+            if y_idx > 0:
+                return infos, warnings, ["At least, 2 bands are tagged with Description = north_velocity"]
+            y_idx = i+1
+        elif desc == 'up_velocity':
+            if z_idx > 0:
+                return infos, warnings, ["At least, 2 bands are tagged with Description = up_velocity"]
+            z_idx = i+1
+        elif desc:
+            info.append('Band of type %s not recognized by PROJ')
+
+    if x_idx > 0 and y_idx > 0 and z_idx > 0:
+        if x_idx != 1 or y_idx != 2 or z_idx != 3:
+            infos.append(
+                'Usually the first, second and third band should be respectively east_velocity, north_velocity, up_velocity')
+    elif x_idx > 0 or y_idx > 0 or z_idx > 0:
+        return infos, warnings, ["Part of the bands are tagged with Description = east_velocity/north_velocity/up_velocity but not all"]
+    else:
+        if is_first_subds:
+            warnings.append('No explicit bands tagged with Description = east_velocity/north_velocity/up_velocity. Assuming the first, second and third band are respectively east_velocity, north_velocity, up_velocity')
+        x_idx = 1
+        y_idx = 2
+        z_idx = 3
+
+    for idx in (x_idx, y_idx, z_idx):
+        if idx == 0:
+            continue
+        units = ds.GetRasterBand(idx).GetUnitType()
+        if not units:
+            if is_first_subds:
+                warnings.append(
+                    "One of east_velocity/north_velocity/up_velocity band is missing units description. Metre will be assumed")
+        elif units not in ('millimetres per year',):
+            errors.append(
+                "One of east_velocity/north_velocity/up_velocity band is using a unit not supported by PROJ")
 
     return infos, warnings, errors
 
@@ -398,7 +456,8 @@ def validate_ifd(global_info, ds, is_first_subds, first_subds):
     elif type not in ('HORIZONTAL_OFFSET',
                       'VERTICAL_OFFSET_GEOGRAPHIC_TO_VERTICAL',
                       'VERTICAL_OFFSET_VERTICAL_TO_VERTICAL',
-                      'GEOCENTRIC_TRANSLATION'):
+                      'GEOCENTRIC_TRANSLATION',
+                      'VELOCITY'):
         warnings.append("TYPE=%s is not recognize by PROJ" % type)
 
     if is_first_subds:
@@ -465,6 +524,11 @@ def validate_ifd(global_info, ds, is_first_subds, first_subds):
         errors += e
     elif type == 'GEOCENTRIC_TRANSLATION':
         i, w, e = validate_geocentric_translation(ds, is_first_subds)
+        infos += i
+        warnings += w
+        errors += e
+    elif type == 'VELOCITY':
+        i, w, e = validate_velocity(ds, is_first_subds)
         infos += i
         warnings += w
         errors += e
