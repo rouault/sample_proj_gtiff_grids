@@ -110,7 +110,7 @@ def validate_horizontal_offset(ds, is_first_subds):
         elif desc == 'longitude_offset_accuracy':
             lon_accuracy_idx = i+1
         elif desc:
-            info.append('Band of type %s not recognized by PROJ')
+            infos.append('Band of type %s not recognized by PROJ' % desc)
 
     if lat_offset_idx > 0 and lon_offset_idx > 0:
         if lat_offset_idx != 1 or lon_offset_idx != 2:
@@ -197,7 +197,7 @@ def validate_vertical_offset_geographic_to_vertical(ds, is_first_subds):
                 return infos, warnings, ["At least, 2 bands are tagged with Description = geoid_undulation"]
             offset_idx = i+1
         elif desc:
-            info.append('Band of type %s not recognized by PROJ')
+            infos.append('Band of type %s not recognized by PROJ' % desc)
 
     if offset_idx == 0:
         if is_first_subds:
@@ -244,7 +244,7 @@ def validate_vertical_offset_vertical_to_vertical(ds, is_first_subds):
                 return infos, warnings, ["At least, 2 bands are tagged with Description = vertical_offset"]
             offset_idx = i+1
         elif desc:
-            info.append('Band of type %s not recognized by PROJ')
+            infos.append('Band of type %s not recognized by PROJ' % desc)
 
     if offset_idx == 0:
         if is_first_subds:
@@ -304,7 +304,7 @@ def validate_geocentric_translation(ds, is_first_subds):
                 return infos, warnings, ["At least, 2 bands are tagged with Description = z_translation"]
             z_idx = i+1
         elif desc:
-            info.append('Band of type %s not recognized by PROJ')
+            infos.append('Band of type %s not recognized by PROJ' % desc)
 
     if x_idx > 0 and y_idx > 0 and z_idx > 0:
         if x_idx != 1 or y_idx != 2 or z_idx != 3:
@@ -361,8 +361,8 @@ def validate_velocity(ds, is_first_subds):
             if z_idx > 0:
                 return infos, warnings, ["At least, 2 bands are tagged with Description = up_velocity"]
             z_idx = i+1
-        elif desc:
-            info.append('Band of type %s not recognized by PROJ')
+        elif desc and desc not in ('east_velocity_accuracy', 'north_velocity_accuracy', 'up_velocity_accuracy'):
+            infos.append('Band of type %s not recognized by PROJ' % desc)
 
     if x_idx > 0 and y_idx > 0 and z_idx > 0:
         if x_idx != 1 or y_idx != 2 or z_idx != 3:

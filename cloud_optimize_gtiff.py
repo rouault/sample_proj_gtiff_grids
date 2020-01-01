@@ -118,14 +118,23 @@ def generate_optimized_file(srcfilename, destfilename):
 
     ds = gdal.Open(srcfilename)
     assert ds
-    put_bands_3_and_4_at_end = False
+    first_band_to_put_at_end = None
     if ds.GetMetadataItem('TYPE') == 'HORIZONTAL_OFFSET' and \
        ds.RasterCount >= 4 and \
        ds.GetRasterBand(1).GetDescription() == 'latitude_offset' and \
        ds.GetRasterBand(2).GetDescription() == 'longitude_offset' and \
        ds.GetRasterBand(3).GetDescription() == 'latitude_offset_accuracy' and \
        ds.GetRasterBand(4).GetDescription() == 'longitude_offset_accuracy':
-        put_bands_3_and_4_at_end = True
+        first_band_to_put_at_end = 3
+    elif ds.GetMetadataItem('TYPE') == 'VELOCITY' and \
+       ds.RasterCount >= 6 and \
+       ds.GetRasterBand(1).GetDescription() == 'east_velocity' and \
+       ds.GetRasterBand(2).GetDescription() == 'north_velocity' and \
+       ds.GetRasterBand(3).GetDescription() == 'up_velocity' and \
+       ds.GetRasterBand(4).GetDescription() == 'east_velocity_accuracy' and \
+       ds.GetRasterBand(5).GetDescription() == 'north_velocity_accuracy' and \
+       ds.GetRasterBand(6).GetDescription() == 'up_velocity_accuracy':
+        first_band_to_put_at_end = 4
     del ds
 
     in_f = open(srcfilename, 'rb')
@@ -316,8 +325,8 @@ def generate_optimized_file(srcfilename, destfilename):
 
         if ifd.planarconfig_contig:
             list_bands = (0,)
-        elif ifd.nbands == 4 and put_bands_3_and_4_at_end:
-            list_bands = (0, 1)
+        elif first_band_to_put_at_end:
+            list_bands = range(first_band_to_put_at_end - 1)
         else:
             list_bands = range(ifd.nbands)
 
@@ -330,13 +339,14 @@ def generate_optimized_file(srcfilename, destfilename):
                 out_f.write(data)
 
     # And then the errors at end for NTv2 like products
-    if not ifd.planarconfig_contig and put_bands_3_and_4_at_end:
+    if not ifd.planarconfig_contig and first_band_to_put_at_end and \
+       ifd.nbands >= first_band_to_put_at_end:
         for ifd in ifds:
-            if ifd.nbands != 4:
+            if ifd.nbands < first_band_to_put_at_end:
                 continue
 
             for i in range(ifd.num_striles_per_band):
-                for iband in (2, 3):
+                for iband in range(first_band_to_put_at_end-1, ifd.nbands):
                     idx_strile = ifd.num_striles_per_band * iband + i
                     in_f.seek(ifd.strile_offset_in[idx_strile])
                     data = in_f.read(ifd.strile_length_in[idx_strile])
