@@ -116,7 +116,7 @@ with open(os.path.join(proj_datumgrid, 'filelist.csv')) as f:
             cvt_args.description = None
             cvt_args.copyright = "Derived from work by " + source + ". " + licence
             cvt_args.accuracy_unit = 'unknown' if os.path.basename(filename) in (
-                'BWTA2017.gsb', 'DLx_ETRS89_geo.gsb', 'D73_ETRS89_geo.gsb') else None
+                'BWTA2017.gsb') else None
             cvt_args.uint16_encoding = False
             cvt_args.positive_longitude_shift_value = 'east'
             cvt_args.datetime = datetime.date.today().strftime("%Y:%m:%d %H:%M:%S")

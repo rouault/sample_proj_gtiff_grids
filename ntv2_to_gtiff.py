@@ -218,7 +218,9 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                                       'CHENyx06_ETRS.gsb',
                                       'A66_National_13_09_01.gsb',
                                       'National_84_02_07_01.gsb',
-                                      'GDA94_GDA2020_conformal_and_distortion.gsb',):
+                                      'GDA94_GDA2020_conformal_and_distortion.gsb',
+                                      'DLx_ETRS89_geo.gsb',
+                                      'D73_ETRS89_geo.gsb'):
                     args.accuracy_unit = 'arc-second'
 
                 else:
