@@ -105,6 +105,7 @@ def get_year_month_day(src_date, src_basename):
     if (src_date[2] == '-' and src_date[5] == '-') or \
             (src_date[2] == '/' and src_date[5] == '/'):
         if src_basename.startswith('rdtrans') or \
+           src_basename.startswith('rdcorr') or \
                 src_basename.startswith('ntf_r93') or \
                 src_basename.startswith('BWTA2017') or \
                 src_basename.startswith('BETA2007') or \
@@ -208,7 +209,8 @@ def create_unoptimized_file(sourcefilename, tmpfilename, args):
                                     'PE7783V2.GSB',
                                     'SK27-98.GSB',
                                     'SK83-98.GSB',
-                                    'TO27CSv1.GSB',):
+                                    'TO27CSv1.GSB',
+                                    'rdcorr2018.gsb',):
                     args.accuracy_unit = 'metre'
 
                 elif src_basename in ('ntf_r93.gsb',
